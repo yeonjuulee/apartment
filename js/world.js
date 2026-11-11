@@ -108,6 +108,15 @@
     return G.building.houses[id].slot === 'left' ? b.min : b.max;
   }
 
+  // 내 집 침대 중심 x (아이템 'bed'가 그려지는 자리)
+  function bedX() { return housePoint(G.building.playerHome, 0.27); }
+
+  // 플레이어가 침대 앞에 있는가
+  function atBed(state) {
+    const p = state.player;
+    return p.area === 'home' && p.floor === homeHouse().floor && Math.abs(p.x - bedX()) <= G.config.BED_REACH;
+  }
+
   function locationLabel(state) {
     const p = state.player;
     if (p.inElevator) return '엘리베이터';
@@ -130,6 +139,8 @@
     walkBounds: walkBounds,
     areaAt: areaAt,
     interactionAt: interactionAt,
+    bedX: bedX,
+    atBed: atBed,
     locationLabel: locationLabel,
   };
 })(window.Game = window.Game || {});

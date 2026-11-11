@@ -9,9 +9,12 @@
     const buildingTop = C.TOP_UI + C.ROOF_H;
     const buildingH = B.floors * C.FLOOR_H + (B.floors + 1) * C.SLAB;
 
+    const dialogTop = buildingTop + buildingH + C.GROUND;   // 게임 화면 아래 대화 영역
+
     const L = {
       width: innerW + C.WALL * 2,
-      height: buildingTop + buildingH + C.GROUND,
+      height: dialogTop + C.DIALOG_H + 12,
+      dialogTop: dialogTop,
       innerX: C.WALL,                       // 층 내부 x=0 의 캔버스 x
       innerW: innerW,
       buildingTop: buildingTop,

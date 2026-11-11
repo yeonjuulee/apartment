@@ -8,9 +8,10 @@
       const n = state.npcs[id];
       const dx = n.targetX - n.x;
       if (Math.abs(dx) <= speed) {
+        const arrivedHome = n.walking && n.targetX === n.homeX;
         n.x = n.targetX;
         n.walking = false;
-        if (n.targetX === n.homeX) n.facing = null;   // 제자리에 오면 평소 방향으로
+        if (arrivedHome) n.facing = null;   // 제자리에 돌아오면 평소 방향으로
       } else {
         n.x += Math.sign(dx) * speed;
         n.walking = true;
@@ -21,5 +22,15 @@
 
   function isAt(state, id, x) { return state.npcs[id].x === x; }
 
-  G.npcs = { update: update, isAt: isAt };
+  // 아침: 모두 제자리로
+  function resetAll(state) {
+    Object.keys(state.npcs).forEach(function (id) {
+      const n = state.npcs[id];
+      n.x = n.targetX = n.homeX;
+      n.walking = false;
+      n.facing = null;
+    });
+  }
+
+  G.npcs = { update: update, isAt: isAt, resetAll: resetAll };
 })(window.Game = window.Game || {});

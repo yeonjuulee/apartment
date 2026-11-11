@@ -9,7 +9,7 @@
   canvas.height = L.height;
 
   const state = G.createState();
-  const input = G.createInput(window);
+  const input = G.createInput(window, canvas);
 
   G.state = state;   // 개발용: 콘솔에서 Game.state 로 확인
 

@@ -3,7 +3,10 @@
 (function (G) {
   'use strict';
 
-  function createState() {
+  // opts.intro: true면 타이틀 + 인트로 컷신부터, false면 Day 1 아침부터. 기본값은 config.START_WITH_INTRO.
+  function createState(opts) {
+    opts = opts || {};
+    const intro = opts.intro !== undefined ? opts.intro : G.config.START_WITH_INTRO;
     const B = G.building;
     const W = G.world;
     const home = B.houses[B.playerHome];
@@ -17,8 +20,9 @@
       npcs[id] = { x: x, homeX: x, targetX: x, walking: false, facing: null };
     });
 
-    return {
-      scene: 'explore',          // 'explore' | 'visit' | 'elevator' (이후: 'notebook' | 'night' ...)
+    const state = {
+      // 'explore' | 'visit' | 'elevator' | 'notebook' | 'endDay' | 'night' | 'cutscene' | 'stub'
+      scene: 'explore',
 
       player: {
         floor: home.floor,
@@ -34,29 +38,51 @@
 
       // 진행 중인 방문: { houseId, mode: 'normal'|'refuse'|'silence', phase, t }
       visit: null,
-      // 화면에 떠 있는 대화: { houseId, text, fromInside(나오지 않고 집 안에서) }
+      // 대화 영역에 떠 있는 대화: { speaker(이름, 없으면 내레이션), narration, lines, index }
       dialog: null,
 
       elevator: {
-        floor: B.elevatorStartFloor, // 승강기가 서 있는(또는 마지막으로 선) 층
-        pos: B.elevatorStartFloor,   // 화면용 실수 위치 (이동 중 2.4 등)
-        phase: 'idle',               // idle | summon | opening | boarding | select | closing | moving | arriving | exiting | closingAfter
+        floor: B.elevatorStartFloor,
+        pos: B.elevatorStartFloor,
+        phase: 'idle',
         t: 0,
         from: null, to: null,
         selection: null,
       },
 
-      // ---- 하루 단위 기록 ----
+      // ---- 하루 ----
       day: 1,
       maxDay: 5,
       talkedToday: {},           // { '301': true } 오늘 대화를 마친 집
       knocksToday: {},           // { '301': 2 } 오늘 노크 횟수
-      log: [],                   // 증언 수첩: [{ day, houseId, text }]
-      flags: {},
+      bedArmed: true,            // 침대 범위 밖에 있다가 들어오면 "잠자리에 들까?" (들어온 순간 false)
+      endDay: null,              // 잠자리 선택: { index }
+      night: null,               // 밤 진행: { n, phase, t, chars, shake }
 
+      // ---- 수첩 ----
+      log: [],                   // [{ day, type: 'testimony'|'noise', houseId?, text }]
+      notebook: {
+        mode: 'daily',           // 'daily' | 'neighbor'
+        day: 1,                  // 날짜별 보기에서 보고 있는 Day
+        cell: '301',             // 이웃별 보기에서 고른 집
+        excluded: {},            // 용의자에서 제외 표시한 집 { '202': true }
+        unread: false,           // 새 기록 점
+        prevScene: null,
+      },
+      toast: null,               // { text, t }
+
+      emotes: [],                // 감정 이펙트 [{ target: 'player'|'301'.., type, gesture, t, ms }]
+
+      cutscene: null,            // 인트로 등 컷신 진행: { script, i, step, t, sub, card, note }
+      hints: { seen: {}, current: null },   // 첫 행동 안내
+
+      flags: {},
       debug: false,
       time: 0,
     };
+
+    if (intro) G.cutscene.start(state, G.intro);
+    return state;
   }
 
   G.createState = createState;
