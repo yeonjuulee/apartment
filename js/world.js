@@ -1,6 +1,6 @@
 // world.js — 건물 구조 해석과 위치 판정 (순수 함수, 화면과 무관)
 // 좌표계: x는 "층 내부" 기준 px (0 = 왼쪽 외벽 안쪽 면), floor는 1 ~ floors.
-// 플레이어의 area: 'hallway'(복도) | 'home'(내 집 안)
+// 플레이어는 복도 + (내 집 층이면) 내 집 안을 자유롭게 걷는다. 남의 집에는 들어갈 수 없다.
 (function (G) {
   'use strict';
 
@@ -37,19 +37,21 @@
 
   function houseSegment(id) { return segmentBySlot(G.building.houses[id].slot); }
 
-  // 집 문이 있는 x (집과 복도 경계)
-  function doorX(id) {
+  function homeHouse() { return G.building.houses[G.building.playerHome]; }
+
+  // 집과 복도의 경계 x
+  function boundaryX(id) {
     const hall = hallway();
     return G.building.houses[id].slot === 'left' ? hall.x0 : hall.x1;
   }
 
-  // 집 안에서 문 바로 앞 (이웃이 문을 열 때 서는 자리)
-  function doorSpotInside(id) {
-    const off = G.config.PARTITION / 2 + 22;
-    return G.building.houses[id].slot === 'left' ? doorX(id) - off : doorX(id) + off;
+  // 노크하면 이웃이 나와서 서는 자리 (경계 바로 안쪽)
+  function meetSpot(id) {
+    const off = 24;
+    return G.building.houses[id].slot === 'left' ? boundaryX(id) - off : boundaryX(id) + off;
   }
 
-  // 집 안의 비율 위치 → x (0 = 바깥 외벽 쪽, 1 = 문 쪽)
+  // 집 안의 비율 위치 → x (0 = 바깥 외벽 쪽, 1 = 복도 쪽)
   function housePoint(id, ratio) {
     const seg = houseSegment(id);
     return G.building.houses[id].slot === 'left'
@@ -62,45 +64,50 @@
     return (hall.x0 + hall.x1) / 2;
   }
 
-  // 플레이어가 현재 영역에서 움직일 수 있는 x 범위
-  function areaBounds(area) {
+  // 그 층에서 플레이어가 걸을 수 있는 x 범위
+  function walkBounds(floor) {
     const half = G.config.PLAYER_W / 2;
-    const wall = G.config.PARTITION / 2;
-    if (area === 'home') {
-      const seg = houseSegment(G.building.playerHome);
-      const left = G.building.houses[G.building.playerHome].slot === 'left';
-      return left
-        ? { min: seg.x0 + half, max: seg.x1 - wall - half }
-        : { min: seg.x0 + wall + half, max: seg.x1 - half };
-    }
     const hall = hallway();
-    return { min: hall.x0 + wall + half, max: hall.x1 - wall - half };
+    const b = { min: hall.x0 + half, max: hall.x1 - half };
+    const home = homeHouse();
+    if (floor === home.floor) {
+      const seg = houseSegment(G.building.playerHome);
+      if (home.slot === 'left') b.min = seg.x0 + half;
+      else b.max = seg.x1 - half;
+    }
+    return b;
+  }
+
+  // x 위치가 복도인지 내 집인지
+  function areaAt(floor, x) {
+    const hall = hallway();
+    return x >= hall.x0 && x <= hall.x1 ? 'hallway' : 'home';
   }
 
   // 지금 위치에서 Space로 할 수 있는 일. 없으면 null.
-  //   { type: 'knock', houseId } | { type: 'enterHome' } | { type: 'exitHome' } | { type: 'elevator' }
+  //   { type: 'knock', houseId } | { type: 'elevator' }
   function interactionAt(state) {
     const p = state.player;
     const C = G.config;
-    const home = G.building.playerHome;
-
-    if (p.area === 'home') {
-      return Math.abs(p.x - doorX(home)) <= C.DOOR_REACH ? { type: 'exitHome' } : null;
-    }
+    if (p.area !== 'hallway') return null;
 
     if (Math.abs(p.x - elevatorX()) <= C.ELEV_REACH) return { type: 'elevator' };
 
-    const ids = ['left', 'right'].map(function (s) { return houseIdAt(p.floor, s); });
-    for (let i = 0; i < ids.length; i++) {
-      const id = ids[i];
-      if (id && Math.abs(p.x - doorX(id)) <= C.DOOR_REACH) {
-        return id === home ? { type: 'enterHome' } : { type: 'knock', houseId: id };
-      }
+    const slots = ['left', 'right'];
+    for (let i = 0; i < slots.length; i++) {
+      const id = houseIdAt(p.floor, slots[i]);
+      if (!id || id === G.building.playerHome) continue;
+      if (Math.abs(p.x - boundaryX(id)) <= C.KNOCK_REACH) return { type: 'knock', houseId: id };
     }
     return null;
   }
 
-  // 화면 표시용: 플레이어가 있는 곳 이름
+  // 노크할 때 플레이어가 서는 자리 (경계 바로 앞)
+  function knockSpot(id) {
+    const b = walkBounds(G.building.houses[id].floor);
+    return G.building.houses[id].slot === 'left' ? b.min : b.max;
+  }
+
   function locationLabel(state) {
     const p = state.player;
     if (p.inElevator) return '엘리베이터';
@@ -115,11 +122,13 @@
     hallway: hallway,
     houseIdAt: houseIdAt,
     houseSegment: houseSegment,
-    doorX: doorX,
-    doorSpotInside: doorSpotInside,
+    boundaryX: boundaryX,
+    meetSpot: meetSpot,
+    knockSpot: knockSpot,
     housePoint: housePoint,
     elevatorX: elevatorX,
-    areaBounds: areaBounds,
+    walkBounds: walkBounds,
+    areaAt: areaAt,
     interactionAt: interactionAt,
     locationLabel: locationLabel,
   };

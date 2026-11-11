@@ -8,7 +8,6 @@
 
     switch (state.scene) {
       case 'explore': updateExplore(state, input, dt); break;
-      case 'doorway': G.doorway.update(state, dt); break;
       case 'visit': G.visit.update(state, input, dt); break;
       case 'elevator': break;   // 아래 elevator.update가 입력까지 처리
     }
@@ -22,23 +21,23 @@
     const p = state.player;
     const C = G.config;
 
-    // 좌우 이동 (현재 영역 안에서만)
+    // 좌우 이동 (복도 + 내 집, 남의 집 경계에서 멈춤)
     const h = input.getHorizontal();
     p.walking = !!h;
     if (h) {
       p.facing = h;
       const sign = h === 'left' ? -1 : 1;
-      const b = G.world.areaBounds(p.area);
+      const b = G.world.walkBounds(p.floor);
       p.x = G.util.clamp(p.x + sign * C.PLAYER_SPEED * dt / 1000, b.min, b.max);
+      p.area = G.world.areaAt(p.floor, p.x);
     }
 
-    // Space: 노크 / 내 집 출입 / 엘리베이터 호출
+    // Space: 노크 / 엘리베이터 호출
     if (!input.consumePressed('action')) return;
     const it = G.world.interactionAt(state);
     if (!it) return;
     p.walking = false;
     if (it.type === 'knock') G.visit.start(state, it.houseId);
-    else if (it.type === 'enterHome' || it.type === 'exitHome') G.doorway.start(state);
     else if (it.type === 'elevator') G.elevator.call(state);
   }
 

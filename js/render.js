@@ -1,7 +1,7 @@
 // render.js — 그리기 순서 관리 + 인물 그리기 (상태는 읽기만, 절대 수정하지 않음)
 //
-// 순서: 배경 → 옥상 → 외벽 → 방/복도 → 층 바닥 → 승강로 → 승강기(+탄 플레이어)
-//       → 엘리베이터 문 → 이웃 → 칸막이·집 문 → 플레이어 → 말풍선·안내·대화창 → UI → 디버그
+// 순서: 배경 → 외벽 → 방/복도 → 층 바닥 → 경계 기둥 → 승강로 → 승강기(+탄 플레이어)
+//       → 엘리베이터 문 → 이웃 → 플레이어 → 말풍선·안내·대화창 → UI → 디버그
 (function (G) {
   'use strict';
 
@@ -17,19 +17,16 @@
 
     ctx.fillStyle = P.bg;
     ctx.fillRect(0, 0, L.width, L.height);
-    ctx.fillStyle = P.sky;
-    ctx.fillRect(0, C.TOP_UI, L.width, C.ROOF_H);
 
-    RB.roofline(ctx, L);
     RB.walls(ctx, L);
     RB.rooms(ctx, L);
     RB.slabs(ctx, L);
+    RB.boundaries(ctx, L);
     RB.shaft(ctx, L);
     RB.car(ctx, L, state);
     if (state.player.inElevator) drawPlayer(ctx, L, state);   // 문 뒤에 가려지도록 먼저
     RB.elevatorDoors(ctx, L, state);
     drawNpcs(ctx, L, state);
-    RB.partitionsAndDoors(ctx, L, state);
     if (!state.player.inElevator) drawPlayer(ctx, L, state);
 
     RU.knockBubble(ctx, L, state);
@@ -57,18 +54,22 @@
     const p = state.player;
     const e = state.elevator;
     const base = p.inElevator && e.phase === 'moving' ? RB.floorBaseAt(L, e.pos) : L.floorBase(p.floor);
-    S.FIGURES.player(ctx, L.toScreenX(p.x), base, { facing: p.facing, bob: bob(p.walking, state.time) });
+    S.FIGURES.player(ctx, L.toScreenX(p.x), base, {
+      facing: p.facing, bob: bob(p.walking, state.time), knock: G.visit.knocking(state),
+    });
   }
 
   function drawDebug(ctx, L, state) {
     const p = state.player;
     const top = L.floorTop(p.floor);
-    // 상호작용 범위: 집 문, 엘리베이터
+    // 상호작용 범위: 노크(남의 집 경계 복도 쪽), 엘리베이터
     ctx.fillStyle = P.debugZone;
     ['left', 'right'].forEach(function (slot) {
       const id = W.houseIdAt(p.floor, slot);
-      const dx = L.toScreenX(W.doorX(id));
-      ctx.fillRect(dx - C.DOOR_REACH, top, C.DOOR_REACH * 2, C.FLOOR_H);
+      if (id === G.building.playerHome) return;
+      const bx = L.toScreenX(W.boundaryX(id));
+      const inward = slot === 'left' ? 0 : -C.KNOCK_REACH;
+      ctx.fillRect(bx + inward, top, C.KNOCK_REACH, C.FLOOR_H);
     });
     const ex = L.toScreenX(W.elevatorX());
     ctx.fillRect(ex - C.ELEV_REACH, top, C.ELEV_REACH * 2, C.FLOOR_H);
@@ -76,7 +77,7 @@
     // 현재 영역 이동 범위
     ctx.strokeStyle = P.debugLine;
     ctx.lineWidth = 1;
-    const b = W.areaBounds(p.area);
+    const b = W.walkBounds(p.floor);
     [b.min, b.max].forEach(function (x) {
       ctx.beginPath();
       ctx.moveTo(L.toScreenX(x) + 0.5, top);

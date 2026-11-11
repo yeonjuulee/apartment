@@ -18,11 +18,11 @@
     });
 
     return {
-      scene: 'explore',          // 'explore' | 'doorway' | 'visit' | 'elevator' (이후: 'notebook' | 'night' ...)
+      scene: 'explore',          // 'explore' | 'visit' | 'elevator' (이후: 'notebook' | 'night' ...)
 
       player: {
         floor: home.floor,
-        area: 'home',            // 'home' | 'hallway'
+        area: 'home',            // 'home' | 'hallway' (x 위치로 정해짐)
         x: W.housePoint(B.playerHome, B.playerStartRatio),
         facing: 'right',
         walking: false,
@@ -34,9 +34,7 @@
 
       // 진행 중인 방문: { houseId, mode: 'normal'|'refuse'|'silence', phase, t }
       visit: null,
-      // 내 집 문 드나들기: { toArea, phase, t }
-      doorway: null,
-      // 화면에 떠 있는 대화: { houseId, text, through(문 너머) }
+      // 화면에 떠 있는 대화: { houseId, text, fromInside(나오지 않고 집 안에서) }
       dialog: null,
 
       elevator: {

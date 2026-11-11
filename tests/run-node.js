@@ -14,7 +14,6 @@ const files = [
   'js/world.js',
   'js/state.js',
   'js/systems/npcs.js',
-  'js/systems/doorway.js',
   'js/systems/visit.js',
   'js/systems/elevator.js',
   'js/update.js',

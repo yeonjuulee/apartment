@@ -26,10 +26,10 @@
   function inHallway(s, floor, x) {
     Object.assign(s.player, { floor: floor, area: 'hallway', x: x, tween: null, inElevator: false });
   }
-  function atDoorOf(s, id) {
+  function atDoorOf(s, id) {           // 그 집 경계 근처 복도 (노크 가능 범위 안쪽 끝)
     const h = G.building.houses[id];
-    const b = W.areaBounds('hallway');
-    inHallway(s, h.floor, h.slot === 'left' ? b.min : b.max);
+    const bx = W.boundaryX(id);
+    inHallway(s, h.floor, h.slot === 'left' ? bx + C.KNOCK_REACH - 4 : bx - C.KNOCK_REACH + 4);
   }
   function atElevator(s, floor) { inHallway(s, floor, W.elevatorX()); }
 
@@ -69,116 +69,114 @@
   });
 
   // ================= 이동 제한 =================
-  test('내 집 안에서 걸어서는 복도로 나갈 수 없다 (문으로만)', function () {
+  test('게임 시작 시 승강기는 플레이어와 같은 2층에 서 있다', function () {
     const s = G.createState();
-    run(s, 'right', 5000);
-    assert(s.player.area === 'home', 'area ' + s.player.area);
-    assert(s.player.x < W.doorX('201'), '칸막이 통과: x=' + s.player.x);
+    assert(s.elevator.floor === 2 && s.elevator.pos === 2 && s.elevator.phase === 'idle', JSON.stringify(s.elevator));
+    run(s, null, 2000);
+    assert(s.elevator.floor === 2 && s.elevator.phase === 'idle', '혼자 움직임');
+  });
+
+  test('내 집과 복도는 문 없이 걸어서 오갈 수 있다', function () {
+    const s = G.createState();
+    run(s, 'right', 1200);
+    assert(s.player.area === 'hallway', '복도로 못 나감: ' + JSON.stringify(s.player));
+    run(s, 'left', 1200);
+    assert(s.player.area === 'home', '집으로 못 들어옴');
   });
 
   test('내 집 왼쪽 외벽을 통과할 수 없다', function () {
     const s = G.createState();
     run(s, 'left', 5000);
-    assert(s.player.x === W.areaBounds('home').min, 'x=' + s.player.x);
+    assert(s.player.x === W.walkBounds(2).min, 'x=' + s.player.x);
   });
 
-  test('복도에서 걸어서 남의 집(오른쪽)이나 내 집(왼쪽)으로 들어갈 수 없다', function () {
+  test('2층 복도에서 오른쪽 202호로 걸어 들어갈 수 없다', function () {
     const s = G.createState();
-    atElevator(s, 2);
-    run(s, 'right', 5000);
-    assert(s.player.x === W.areaBounds('hallway').max && s.player.x < W.doorX('202'), '오른쪽 x=' + s.player.x);
+    run(s, 'right', 6000);
+    assert(s.player.x === W.walkBounds(2).max && s.player.x < W.boundaryX('202'), 'x=' + s.player.x);
+  });
+
+  test('다른 층에서는 양쪽 집 모두 들어갈 수 없다', function () {
+    const s = G.createState();
+    inHallway(s, 1, W.elevatorX());
     run(s, 'left', 5000);
-    assert(s.player.x === W.areaBounds('hallway').min && s.player.x > W.doorX('201'), '왼쪽 x=' + s.player.x);
-    assert(s.player.area === 'hallway', 'area 바뀜');
+    assert(s.player.x > W.boundaryX('101') && s.player.area === 'hallway', '101 진입: x=' + s.player.x);
+    run(s, 'right', 5000);
+    assert(s.player.x < W.boundaryX('102') && s.player.area === 'hallway', '102 진입: x=' + s.player.x);
   });
 
-  test('문·엘리베이터 근처가 아니면 Space를 눌러도 아무 일도 없다', function () {
-    const s = G.createState();
-    s.player.x = W.areaBounds('home').min;   // 집 안 바깥쪽 끝
+  test('노크·엘리베이터 범위 밖에서는 Space를 눌러도 아무 일도 없다', function () {
+    const s = G.createState();             // 집 안
     press(s, 'action');
-    assert(s.scene === 'explore' && s.player.area === 'home', s.scene);
+    assert(s.scene === 'explore', s.scene);
+    inHallway(s, 1, W.elevatorX() - C.ELEV_REACH - 10);
+    press(s, 'action');
+    assert(s.scene === 'explore', '복도 빈 곳에서 반응');
   });
 
-  // ================= 내 집 출입 =================
-  test('내 집 문 앞에서 Space → 복도로 나가고, 다시 Space → 들어온다', function () {
+  test('내 집 쪽 경계에서는 노크 안내가 뜨지 않는다', function () {
     const s = G.createState();
-    run(s, 'right', 3000);
-    assert(W.interactionAt(s).type === 'exitHome', '나가기 안내 없음');
-    press(s, 'action');
-    waitUntil(s, function () { return s.scene === 'explore'; });
-    assert(s.player.area === 'hallway' && s.player.x > W.doorX('201'), '나가기 실패 ' + JSON.stringify(s.player));
-    assert(W.interactionAt(s).type === 'enterHome', '들어가기 안내 없음');
-    press(s, 'action');
-    waitUntil(s, function () { return s.scene === 'explore'; });
-    assert(s.player.area === 'home' && s.player.x < W.doorX('201'), '들어가기 실패');
-  });
-
-  test('출입 중에는 좌우로 움직이지 않는다 (자동으로만 이동)', function () {
-    const s = G.createState();
-    run(s, 'right', 3000);
-    press(s, 'action');
-    const x0 = s.player.x;
-    for (let i = 0; i < 5; i++) step(s, 'left');   // 문 열리는 동안
-    assert(s.player.x === x0, 'x 바뀜');
+    inHallway(s, 2, W.boundaryX('201') + 10);
+    assert(!W.interactionAt(s), JSON.stringify(W.interactionAt(s)));
   });
 
   // ================= 노크 =================
-  test('남의 집 문 앞에서는 노크 안내가 뜬다', function () {
+  test('남의 집 경계 근처에서는 노크 안내가 뜬다', function () {
     const s = G.createState();
     atDoorOf(s, '202');
     const it = W.interactionAt(s);
     assert(it && it.type === 'knock' && it.houseId === '202', JSON.stringify(it));
   });
 
-  test('첫 노크: 이웃이 문으로 걸어와 → 문이 열리고 → 대화', function () {
+  test('첫 노크: 경계로 다가가 두드림 → 이웃이 플레이어 앞으로 걸어옴 → 대화', function () {
     const s = G.createState();
     atDoorOf(s, '202');
     const home = s.npcs['202'].homeX;
     press(s, 'action');
-    assert(s.scene === 'visit' && s.visit.phase === 'knock', '노크 시작 안 됨');
-    assert(G.visit.openAmount(s, '202') === 0, '노크 중에 문이 열림');
+    assert(s.scene === 'visit' && s.visit.phase === 'step', '노크 시작 안 됨');
+    waitUntil(s, function () { return s.visit.phase === 'knock'; });
+    assert(s.player.x === W.knockSpot('202'), '경계까지 다가가지 않음: ' + s.player.x);
+    assert(G.visit.knocking(s) !== null, '두드리는 동작 없음');
+    assert(s.npcs['202'].x === home, '두드리는 중에 이웃이 먼저 움직임');
     waitUntil(s, function () { return s.visit.phase === 'approach'; });
     run(s, null, 200);
-    assert(s.npcs['202'].x !== home && s.npcs['202'].walking, '이웃이 걸어오지 않음');
+    assert(s.npcs['202'].walking && s.npcs['202'].x !== home, '이웃이 걸어오지 않음');
     waitUntil(s, function () { return s.visit.phase === 'talk'; });
-    assert(s.npcs['202'].x === W.doorSpotInside('202'), '이웃이 문 앞에 없음');
-    assert(G.visit.openAmount(s, '202') === 1, '문이 열리지 않음');
-    assert(s.dialog && !s.dialog.through && s.dialog.text === G.residents['202'].greet, '대화 없음');
+    assert(s.npcs['202'].x === W.meetSpot('202'), '이웃이 플레이어 앞에 없음');
+    assert(s.dialog && !s.dialog.fromInside && s.dialog.text === G.residents['202'].greet, '대화 없음');
   });
 
-  test('대화를 마치면 → 문이 닫히고 → 이웃이 제자리로, 오늘 대화 기록', function () {
+  test('대화를 마치면 이웃이 제자리로 돌아가고, 오늘 대화가 기록된다', function () {
     const s = G.createState();
     knockAndFinish(s, '202');
     assert(s.scene === 'explore' && !s.dialog, '장면 복귀 안 됨');
-    assert(G.visit.openAmount(s, '202') === 0, '문이 열려 있음');
     assert(s.talkedToday['202'] === true, 'talkedToday');
     assert(s.log.length === 1 && s.log[0].houseId === '202' && s.log[0].day === 1, 'log');
     waitUntil(s, function () { return !s.npcs['202'].walking; });
     assert(s.npcs['202'].x === s.npcs['202'].homeX, '제자리로 안 돌아감');
   });
 
-  test('방문 중에는 플레이어가 움직이지 않는다', function () {
+  test('방문 중에는 A/D를 눌러도 움직이지 않는다 (경계까지 자동으로 한 걸음만)', function () {
     const s = G.createState();
     atDoorOf(s, '202');
-    const x0 = s.player.x;
     press(s, 'action');
     run(s, 'left', 1500);
-    assert(s.player.x === x0, 'x 바뀜');
+    assert(s.player.x === W.knockSpot('202'), 'x=' + s.player.x);
   });
 
-  test('같은 날 두 번째 노크: 이웃은 오지만 문은 열리지 않고 문 너머로 거절', function () {
+  test('같은 날 두 번째 노크: 이웃은 나오지 않고 집 안에서 대답한다', function () {
     const s = G.createState();
     knockAndFinish(s, '101');
     waitUntil(s, function () { return !s.npcs['101'].walking; });
     atDoorOf(s, '101');
     press(s, 'action');
-    let everOpened = false;
+    let moved = false;
     waitUntil(s, function () {
-      if (G.visit.openAmount(s, '101') > 0) everOpened = true;
+      if (s.npcs['101'].x !== s.npcs['101'].homeX) moved = true;
       return s.visit && s.visit.phase === 'refuseTalk';
     });
-    assert(!everOpened, '문이 열렸음');
-    assert(s.dialog.through && s.dialog.text === G.residents['101'].refuse, '거절 대사 아님');
+    assert(!moved, '이웃이 나옴');
+    assert(s.dialog.fromInside && s.dialog.text === G.residents['101'].refuse, '거절 대사 아님');
     press(s, 'action');
     assert(s.scene === 'explore' && s.log.length === 1, '기록이 늘어남 / 장면 복귀 안 됨');
   });
@@ -212,7 +210,8 @@
   });
 
   test('승강기가 다른 층에 있으면 먼저 내 층으로 온다', function () {
-    const s = G.createState();          // 승강기는 1층에서 시작
+    const s = G.createState();
+    s.elevator.floor = 1; s.elevator.pos = 1;
     atElevator(s, 3);
     press(s, 'action');
     assert(s.elevator.phase === 'summon', s.elevator.phase);
@@ -222,8 +221,13 @@
   });
 
   test('2층 → 3층: 탑승 → 선택 → 이동 → 하차', function () {
-    const s = G.createState();
-    s.elevator.floor = 2; s.elevator.pos = 2;
+    const s = G.createState();          // 승강기는 2층에서 시작
+    atElevator(s, 2);
+    press(s, 'action');
+    assert(s.elevator.phase === 'opening', '바로 열리지 않음: ' + s.elevator.phase);
+    waitUntil(s, function () { return s.scene === 'explore' || s.elevator.phase === 'select'; });
+    press(s, 'left');                   // 한 번 내렸다가 다시
+    waitUntil(s, function () { return s.elevator.phase === 'idle'; });
     atElevator(s, 2);
     press(s, 'action');
     waitUntil(s, function () { return s.elevator.phase === 'select'; });
@@ -280,18 +284,10 @@
     assert(s.player.x === x0 && s.elevator.to === 2, '입력이 먹힘');
   });
 
-  test('내 집 안에서는 엘리베이터를 부를 수 없다', function () {
-    const s = G.createState();
-    s.player.x = W.elevatorX();          // 좌표만 맞춰도
-    s.player.area = 'home';
-    const it = W.interactionAt(s);
-    assert(!it || it.type !== 'elevator', '집 안에서 호출됨');
-  });
-
   // ================= 통합 =================
   test('1층부터 5집을 모두 방문하고 내 집으로 돌아올 수 있다', function () {
     const s = G.createState();
-    s.player.area = 'hallway';
+    run(s, 'right', 1200);
     function rideTo(f) {
       atElevator(s, s.player.floor);
       press(s, 'action');
@@ -305,10 +301,7 @@
     rideTo(3); knockAndFinish(s, '301'); knockAndFinish(s, '302');
     rideTo(2); knockAndFinish(s, '202');
     assert(Object.keys(s.talkedToday).length === 5, '대화 ' + Object.keys(s.talkedToday).length);
-    const b = W.areaBounds('hallway');
-    s.player.x = b.min;
-    press(s, 'action');
-    waitUntil(s, function () { return s.scene === 'explore'; });
+    run(s, 'left', 3000);
     assert(s.player.area === 'home', '귀가 실패');
   });
 

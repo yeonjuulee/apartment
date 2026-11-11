@@ -43,6 +43,14 @@
       circle(ctx, x, b - 44, 12);                         // 머리
       poly(ctx, [[x - 9 * f, b - 52], [x + 4 * f, b - 55], [x - 15 * f, b - 72]]); // 두건 끝
       poly(ctx, [[x + 10 * f, b - 47], [x + 17 * f, b - 43], [x + 10 * f, b - 40]]); // 코
+      if (opt.knock != null) {                            // 노크: 팔을 뻗어 두드림
+        const k = (opt.knock % 300) / 300;
+        const reach = k < 0.35 ? k / 0.35 : 1 - (k - 0.35) / 0.65;
+        const fx = x + (16 + 8 * reach) * f;
+        const fy = b - 36 - (1 - reach) * 4;
+        stroke(ctx, [[x + 5 * f, b - 28], [fx, fy]], 5);
+        circle(ctx, fx, fy, 4.5);
+      }
     },
 
     // 301 할아버지: 굽은 등 + 지팡이
@@ -77,10 +85,10 @@
       poly(ctx, [[x - 18, base], [x + 18, base], [x + 9, base - 46], [x - 9, base - 46]]);
       circle(ctx, x, base - 57, 11);
       circle(ctx, x - 8 * f, base - 66, 6);               // 올림머리
-      const kx = x + 28 * f;
+      const kx = x - 28 * f;                              // 아이는 엄마 뒤에
       poly(ctx, [[kx - 9, base], [kx + 9, base], [kx + 6, base - 20], [kx - 6, base - 20]]);
       circle(ctx, kx, base - 28, 8);
-      stroke(ctx, [[x + 9 * f, base - 34], [kx - 5 * f, base - 16]], 4); // 잡은 손
+      stroke(ctx, [[x - 9 * f, base - 34], [kx + 5 * f, base - 16]], 4); // 잡은 손
     },
 
     // 101 대학생: 후드 + 헤드폰

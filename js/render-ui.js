@@ -59,7 +59,7 @@
     if (state.scene === 'elevator' && state.elevator.phase === 'select') return 'W S 층 선택 · Space 이동 · A D 내리기';
     if (state.dialog) return 'Space 다음';
     if (state.scene !== 'explore') return '';
-    return 'A D 이동 · Space 노크 / 출입 / 엘리베이터 · G 디버그';
+    return 'A D 이동 · Space 노크 / 엘리베이터 · G 디버그';
   }
 
   function bottomBar(ctx, L, state) {
@@ -81,8 +81,6 @@
     const it = W.interactionAt(state);
     if (!it) return null;
     if (it.type === 'knock') return 'Space  ' + it.houseId + '호 노크';
-    if (it.type === 'enterHome') return 'Space  들어가기';
-    if (it.type === 'exitHome') return 'Space  나가기';
     if (it.type === 'elevator') return 'Space  엘리베이터';
     return null;
   }
@@ -94,19 +92,33 @@
     pill(ctx, L.toScreenX(p.x), L.floorBase(p.floor) - 96, text, P.silhouette, P.uiLight);
   }
 
-  // ---------- 노크 말풍선 ----------
+  // ---------- 노크: "똑똑" 말풍선 + 두드리는 자리의 충격선 ----------
   function knockBubble(ctx, L, state) {
     const v = state.visit;
     if (!v) return;
     const h = G.building.houses[v.houseId];
-    const dx = L.toScreenX(W.doorX(v.houseId));
-    const side = h.slot === 'left' ? 1 : -1;            // 복도 쪽
-    const y = L.floorBase(h.floor) - C.DOOR_H - 16;
-    if (v.phase === 'knock') {
-      const shake = Math.sin(state.time / 40) * 2;
-      bubble(ctx, dx + side * 30 + shake, y, '똑똑');
+    const bx = L.toScreenX(W.boundaryX(v.houseId));
+    const side = h.slot === 'left' ? 1 : -1;            // 복도 쪽 방향
+    const base = L.floorBase(h.floor);
+    const kt = G.visit.knocking(state);
+
+    if (kt !== null) {
+      bubble(ctx, bx + side * 34, base - 104, '똑똑');
+      if (kt % 300 < 110) {                              // 주먹이 닿는 순간
+        ctx.strokeStyle = P.uiLight;
+        ctx.lineWidth = 2;
+        const cy = base - 40;
+        [[-0.6, 9], [0, 11], [0.6, 9]].forEach(function (a) {
+          const dx = -side * Math.cos(a[0]);
+          const dy = Math.sin(a[0]);
+          ctx.beginPath();
+          ctx.moveTo(bx + dx * 4, cy + dy * 4);
+          ctx.lineTo(bx + dx * (4 + a[1]), cy + dy * (4 + a[1]));
+          ctx.stroke();
+        });
+      }
     } else if (v.phase === 'silence') {
-      bubble(ctx, dx + side * 46, y, '…(인기척이 없다)');
+      bubble(ctx, bx + side * 56, base - 104, '…(인기척이 없다)');
     }
   }
 
@@ -128,7 +140,7 @@
     ctx.textAlign = 'left';
     ctx.fillStyle = P.accent;
     ctx.font = 'bold 15px ' + C.FONT;
-    ctx.fillText(G.residents[d.houseId].name + (d.through ? '  (문 너머로)' : ''), x + 18, y + 28);
+    ctx.fillText(G.residents[d.houseId].name + (d.fromInside ? '  (집 안에서)' : ''), x + 18, y + 28);
 
     ctx.fillStyle = P.uiLight;
     ctx.font = '16px ' + C.FONT;

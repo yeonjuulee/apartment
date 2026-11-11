@@ -1,9 +1,9 @@
 // residents.js — 집마다 사는 사람과 유사 소음 아이템, 문 앞 대사 (로직 없음)
 // figure / item.shape는 silhouettes.js의 그리기 함수 이름.
-// homeRatio: 집 안 평소 위치 (0 = 바깥 외벽 쪽, 1 = 문 쪽)
+// homeRatio: 집 안 평소 위치 (0 = 바깥 외벽 쪽, 1 = 복도 쪽)
 //
-// greet: 문을 열고 하는 말 (지금은 임시 대사, 이후 Day별 증언으로 교체)
-// refuse: 같은 날 다시 찾아왔을 때 문 너머로 하는 말
+// greet: 노크하면 플레이어 앞까지 나와서 하는 말 (지금은 임시 대사, 이후 Day별 증언으로 교체)
+// refuse: 같은 날 다시 찾아왔을 때 나오지 않고 집 안에서 하는 말
 (function (G) {
   'use strict';
 
