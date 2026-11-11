@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>쿵 – Step 1 Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0e0b0f; color: #f1d9cf; padding: 24px; }
+    h1 { font-size: 18px; }
+    li { margin: 4px 0; list-style: none; }
+    .ok { color: #7bd88f; }
+    .fail { color: #ff6b6b; }
+    .err { color: #ffb3b3; font-size: 13px; margin-left: 22px; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">테스트 실행 중…</h1>
+  <ul id="list"></ul>
+
+  <!-- main.js는 불러오지 않는다 (게임 루프 없이 로직과 렌더링만 검사) -->
+  <script src="../js/config.js"></script>
+  <script src="../js/data/building.js"></script>
+  <script src="../js/data/residents.js"></script>
+  <script src="../js/world.js"></script>
+  <script src="../js/state.js"></script>
+  <script src="../js/update.js"></script>
+  <script src="../js/layout.js"></script>
+  <script src="../js/silhouettes.js"></script>
+  <script src="../js/render.js"></script>
+  <script src="tests.js"></script>
+  <script>
+    const results = Game.runTests();
+    const list = document.getElementById('list');
+    results.forEach(function (r) {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="' + (r.ok ? 'ok">✔' : 'fail">✘') + '</span> ' + r.name +
+        (r.ok ? '' : '<div class="err">' + r.error + '</div>');
+      list.appendChild(li);
+    });
+    const passed = results.filter(function (r) { return r.ok; }).length;
+    document.getElementById('summary').textContent =
+      passed + ' / ' + results.length + ' 통과' + (passed === results.length ? ' ✅' : ' ❌');
+  </script>
+</body>
+</html>
