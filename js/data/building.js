@@ -1,8 +1,10 @@
 // building.js — 건물 구조 데이터 (로직 없음)
 //
-//   3F  [ 301 ] [계단] [ 302 ]
-//   2F  [ 201 ] [계단] [ 202 ]   ← 201호: 플레이어 집
-//   1F  [ 101 ] [계단] [ 102 ]
+//   3F  [ 301 ]🚪[ 복도 🛗 복도 ]🚪[ 302 ]
+//   2F  [ 201 ]🚪[ 복도 🛗 복도 ]🚪[ 202 ]   ← 201호: 플레이어 집
+//   1F  [ 101 ]🚪[ 복도 🛗 복도 ]🚪[ 102 ]
+//
+// 플레이어는 복도와 내 집 안에서만 움직인다. 남의 집은 문 앞에서 노크.
 (function (G) {
   'use strict';
 
@@ -10,10 +12,11 @@
     floors: 3,
 
     // 한 층의 가로 구성 (왼쪽 → 오른쪽). width는 config.UNIT 배수.
+    // 집과 복도 경계마다 문이 있다. 엘리베이터는 복도 한가운데.
     segments: [
-      { slot: 'left', type: 'house', width: 7 },
-      { slot: 'stairs', type: 'stairs', width: 3 },
-      { slot: 'right', type: 'house', width: 7 },
+      { slot: 'left', type: 'house', width: 6 },
+      { slot: 'hall', type: 'hallway', width: 6 },
+      { slot: 'right', type: 'house', width: 6 },
     ],
 
     // color/tone은 PALETTE 키. deco는 방 배경에 어두운 톤으로 그려지는 장식.
@@ -27,6 +30,7 @@
     },
 
     playerHome: '201',
-    playerStartRatio: 0.7,   // 집 안에서 시작 위치 (0 = 왼쪽 끝, 1 = 오른쪽 끝)
+    playerStartRatio: 0.55,  // 집 안에서 시작 위치 (0 = 바깥쪽 끝, 1 = 문 쪽 끝)
+    elevatorStartFloor: 1,   // 승강기가 처음 서 있는 층
   };
 })(window.Game = window.Game || {});

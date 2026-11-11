@@ -7,9 +7,19 @@ const vm = require('vm');
 
 const root = path.join(__dirname, '..');
 const files = [
-  'js/config.js', 'js/data/building.js', 'js/data/residents.js',
-  'js/world.js', 'js/state.js', 'js/update.js', 'js/layout.js',
-  'js/silhouettes.js',   // 함수 정의만 하므로 Node에서도 불러올 수 있다
+  'js/config.js',
+  'js/data/building.js',
+  'js/data/residents.js',
+  'js/util.js',
+  'js/world.js',
+  'js/state.js',
+  'js/systems/npcs.js',
+  'js/systems/doorway.js',
+  'js/systems/visit.js',
+  'js/systems/elevator.js',
+  'js/update.js',
+  'js/layout.js',
+  'js/silhouettes.js',
   'tests/tests.js',
 ];
 

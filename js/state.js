@@ -1,30 +1,60 @@
 // state.js — 게임 상태 생성
-// "변하는 값"은 전부 이 객체에 있다. 수정은 update.js에서만, render.js는 읽기만.
+// "변하는 값"은 전부 이 객체에 있다. 수정은 update.js와 systems/*.js에서만, render는 읽기만.
 (function (G) {
   'use strict';
 
   function createState() {
     const B = G.building;
+    const W = G.world;
     const home = B.houses[B.playerHome];
-    const seg = G.world.segmentBySlot(home.slot);
+
+    // 이웃은 움직이므로 위치를 상태로 둔다
+    const npcs = {};
+    Object.keys(G.residents).forEach(function (id) {
+      const r = G.residents[id];
+      if (!r.figure) return;
+      const x = W.housePoint(id, r.homeRatio);
+      npcs[id] = { x: x, homeX: x, targetX: x, walking: false, facing: null };
+    });
 
     return {
-      scene: 'explore',          // 이후: 'dialog' | 'notebook' | 'night' | 'accuse' | 'ending'
+      scene: 'explore',          // 'explore' | 'doorway' | 'visit' | 'elevator' (이후: 'notebook' | 'night' ...)
 
       player: {
         floor: home.floor,
-        x: seg.x0 + seg.width * B.playerStartRatio,
-        facing: 'left',          // 'left' | 'right'
+        area: 'home',            // 'home' | 'hallway'
+        x: W.housePoint(B.playerHome, B.playerStartRatio),
+        facing: 'right',
         walking: false,
-        floorMove: null,         // 계단 이동 중: { from, to, t(0~1) }
+        inElevator: false,
+        tween: null,             // 자동 이동 { fromX, toX, t, ms }
       },
 
-      // ---- 이후 단계에서 사용할 자리 ----
+      npcs: npcs,
+
+      // 진행 중인 방문: { houseId, mode: 'normal'|'refuse'|'silence', phase, t }
+      visit: null,
+      // 내 집 문 드나들기: { toArea, phase, t }
+      doorway: null,
+      // 화면에 떠 있는 대화: { houseId, text, through(문 너머) }
+      dialog: null,
+
+      elevator: {
+        floor: B.elevatorStartFloor, // 승강기가 서 있는(또는 마지막으로 선) 층
+        pos: B.elevatorStartFloor,   // 화면용 실수 위치 (이동 중 2.4 등)
+        phase: 'idle',               // idle | summon | opening | boarding | select | closing | moving | arriving | exiting | closingAfter
+        t: 0,
+        from: null, to: null,
+        selection: null,
+      },
+
+      // ---- 하루 단위 기록 ----
       day: 1,
-      maxDay: 5,                 // 마지노선
-      talkedToday: {},           // { '301': true, ... } 하루 1회 대화 제한
+      maxDay: 5,
+      talkedToday: {},           // { '301': true } 오늘 대화를 마친 집
+      knocksToday: {},           // { '301': 2 } 오늘 노크 횟수
       log: [],                   // 증언 수첩: [{ day, houseId, text }]
-      flags: {},                 // 이벤트 진행 상황
+      flags: {},
 
       debug: false,
       time: 0,

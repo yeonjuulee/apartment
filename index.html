@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>쿵 – Step 1</title>
+  <title>쿵</title>
   <style>
     html, body { margin: 0; height: 100%; background: #0e0b0f; }
     body { display: flex; align-items: center; justify-content: center; }
@@ -12,16 +12,23 @@
 <body>
   <canvas id="game"></canvas>
 
-  <!-- 순서 중요: 설정 → 데이터 → 규칙 → 그리기 → 시작 -->
+  <!-- 순서 중요: 설정 → 데이터 → 규칙 → 시스템 → 그리기 → 시작 -->
   <script src="js/config.js"></script>
   <script src="js/data/building.js"></script>
   <script src="js/data/residents.js"></script>
+  <script src="js/util.js"></script>
   <script src="js/world.js"></script>
   <script src="js/state.js"></script>
   <script src="js/input.js"></script>
+  <script src="js/systems/npcs.js"></script>
+  <script src="js/systems/doorway.js"></script>
+  <script src="js/systems/visit.js"></script>
+  <script src="js/systems/elevator.js"></script>
   <script src="js/update.js"></script>
   <script src="js/layout.js"></script>
   <script src="js/silhouettes.js"></script>
+  <script src="js/render-building.js"></script>
+  <script src="js/render-ui.js"></script>
   <script src="js/render.js"></script>
   <script src="js/main.js"></script>
 </body>
