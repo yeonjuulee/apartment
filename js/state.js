@@ -21,7 +21,7 @@
     });
 
     const state = {
-      // 'explore' | 'visit' | 'elevator' | 'notebook' | 'endDay' | 'night' | 'cutscene' | 'stub'
+      // 'explore' | 'visit' | 'elevator' | 'notebook' | 'endDay' | 'accuse' | 'night' | 'cutscene'
       scene: 'explore',
 
       player: {
@@ -56,7 +56,8 @@
       talkedToday: {},           // { '301': true } 오늘 대화를 마친 집
       knocksToday: {},           // { '301': 2 } 오늘 노크 횟수
       bedArmed: true,            // 침대 범위 밖에 있다가 들어오면 "잠자리에 들까?" (들어온 순간 false)
-      endDay: null,              // 잠자리 선택: { index }
+      endDay: null,              // 침대 메뉴: { options: ['sleep'|'accuse'|'notYet'], index }
+      accuse: null,              // 범인 지목: { index, confirm, confirmIndex }
       night: null,               // 밤 진행: { n, phase, t, chars, shake }
 
       // ---- 수첩 ----

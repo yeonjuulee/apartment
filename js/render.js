@@ -3,7 +3,7 @@
 // 순서: 배경 → [흔들림 시작] 외벽 → 방/복도 → 층 바닥 → 경계 기둥 → 승강로 → 승강기(+탄 플레이어)
 //       → 엘리베이터 문 → 쪽지 → 이웃 → 플레이어 → 밤 어둠 → (누운 플레이어) → 감정 이펙트 [흔들림 끝]
 //       → 말풍선·안내·층 선택 → 상단/하단 바 → 토스트 → 대화 영역(게임 화면 아래)
-//       → 카드(쪽지·목표)·수첩·임시 종료 → 암전 → 타이틀 → 디버그
+//       → 카드(쪽지·목표·엔딩)·수첩 → 암전 → 타이틀 → 디버그
 (function (G) {
   'use strict';
 
@@ -49,7 +49,6 @@
     RU.dialogArea(ctx, L, state);
     RU.card(ctx, L, state);
     RU.notebook(ctx, L, state);
-    RU.stub(ctx, L, state);
     FX.blackoutLayer(ctx, L, state);
     RU.title(ctx, L, state);
     if (state.debug) drawDebug(ctx, L, state);

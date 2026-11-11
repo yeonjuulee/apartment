@@ -1,14 +1,14 @@
-// dayflow.js — 하루의 흐름: 침대에서 "잠자리에 들까?" → 밤(소음) → 다음 날 아침
+// dayflow.js — 하루의 흐름: 침대 메뉴 → 밤(소음) → 다음 날 아침
 //
-//  낮(explore) ──내 집 침대 앞으로 걸어감──▶ endDay 선택 (대화 영역)
-//      ▲                                     │ "아직 아니야" → 다시 낮 (침대에서 벗어났다 돌아오면 또 뜸)
-//      │                                     │ "잠자리에 든다"
+//  낮(explore) ──내 집 침대 앞으로 걸어감──▶ 침대 메뉴 (대화 영역)
+//      ▲                                     │ "아직 아니야"     → 다시 낮 (침대에서 벗어났다 돌아오면 또 뜸)
+//      │                                     │ "범인을 지목한다" → accuse.js → 엔딩
+//      │                                     │ "잠자리에 든다"   (마지막 날에는 없음)
 //      │                                     ▼
 //  아침(startDay) ◀── dawn ◀── fadeOut ◀── toss ◀── hold ◀── typing ◀── fadeIn  (night)
 //
 // Night N을 지나면 Day N 아침이 된다. 인트로의 Night 1 → Day 1.
-// 인트로에서는 밤을 scripted로 열어, hold 이후 진행을 컷신이 맡는다.
-// 마지막 날(maxDay)에 잠자리에 들면, 지목 기능 전까지는 임시 종료 화면(stub)으로 간다.
+// 컷신(인트로·엔딩)에서는 밤을 scripted로 열어, hold 이후 진행을 컷신이 맡는다.
 (function (G) {
   'use strict';
 
@@ -20,32 +20,49 @@
     if (!G.world.atBed(state)) { state.bedArmed = true; return; }
     if (!state.bedArmed) return;
     state.bedArmed = false;
-    state.endDay = { index: 0 };
+    openBedMenu(state);
+    state.hints.seen.bed = true;
+    if (state.day >= state.maxDay) state.hints.seen.lastDay = true;
+  }
+
+  // 마지막 날에는 "잠자리에 든다"가 없다 → 반드시 지목해야 함
+  function bedOptions(state) {
+    return state.day >= state.maxDay ? ['accuse', 'notYet'] : ['sleep', 'accuse', 'notYet'];
+  }
+
+  function openBedMenu(state) {
+    state.endDay = { options: bedOptions(state), index: 0 };
     state.scene = 'endDay';
     state.player.walking = false;
-    state.hints.seen.bed = true;
   }
 
   function updateEndDay(state, input) {
     const e = state.endDay;
-    if (input.consumePressed('up') || input.consumePressed('down')) e.index = 1 - e.index;
-    if (input.consumePressed('close')) { e.index = 1; confirm(state); return; }
+    const n = e.options.length;
+    if (input.consumePressed('up')) e.index = (e.index + n - 1) % n;
+    if (input.consumePressed('down')) e.index = (e.index + 1) % n;
+    if (input.consumePressed('close')) { e.index = e.options.indexOf('notYet'); confirm(state); return; }
     if (input.consumePressed('action')) confirm(state);
   }
 
   function confirm(state) {
-    const choice = state.endDay.index === 0 ? 'sleep' : 'notYet';
+    const choice = state.endDay.options[state.endDay.index];
     state.endDay = null;
     if (choice === 'notYet') { state.scene = 'explore'; return; }
-    if (state.day >= state.maxDay) { state.scene = 'stub'; return; }
+    if (choice === 'accuse') { G.accuse.start(state); return; }
     startNight(state, state.day + 1);
   }
 
   // ---------- 밤 ----------
+  // opts.scripted: 컷신이 진행을 맡음 / opts.record: false면 수첩에 기록 안 함 / opts.dayAfter: 아침이 될 Day
   function startNight(state, n, opts) {
-    const scripted = !!(opts && opts.scripted);
+    opts = opts || {};
+    const scripted = !!opts.scripted;
     if (!scripted) state.scene = 'night';
-    state.night = { n: n, phase: 'fadeIn', t: 0, chars: 0, charT: 0, shake: 0, scripted: scripted, hideText: false };
+    state.night = {
+      n: n, phase: 'fadeIn', t: 0, chars: 0, charT: 0, shake: 0, scripted: scripted, hideText: false,
+      record: opts.record !== false, dayAfter: opts.dayAfter !== undefined ? opts.dayAfter : n,
+    };
     state.visit = null;
     state.dialog = null;
     state.endDay = null;
@@ -61,7 +78,7 @@
   function finishTyping(state) {
     const nt = state.night;
     nt.chars = nightText(nt.n).length;
-    G.notebook.record(state, { day: nt.n, type: 'noise', text: nightText(nt.n) });
+    if (nt.record) G.notebook.record(state, { day: nt.n, type: 'noise', text: nightText(nt.n) });
     setPhase(nt, 'hold');
   }
 
@@ -110,7 +127,7 @@
 
       case 'fadeOut':
         if (nt.t >= C.NIGHT_FADE_MS) {
-          startDay(state, nt.n);
+          startDay(state, nt.dayAfter);
           setPhase(nt, 'dawn');
         }
         break;
@@ -146,11 +163,7 @@
     state.emotes = [];
   }
 
-  // ---------- 임시 종료 화면 (지목 기능 전까지) ----------
-  function updateStub(state, input) {
-    if (input.consumePressed('action')) restart(state);
-  }
-
+  // ---------- 처음부터 (엔딩 뒤) ----------
   function restart(state) {
     const fresh = G.createState();
     Object.keys(state).forEach(function (k) { delete state[k]; });
@@ -164,9 +177,9 @@
   }
 
   G.dayflow = {
-    checkBed: checkBed, updateEndDay: updateEndDay,
+    checkBed: checkBed, openBedMenu: openBedMenu, bedOptions: bedOptions, updateEndDay: updateEndDay,
     startNight: startNight, updateNight: updateNight, toMorning: toMorning, finishTyping: finishTyping,
-    startDay: startDay, updateStub: updateStub, restart: restart,
+    startDay: startDay, restart: restart,
     nightText: nightText, visibleNightText: visibleNightText,
   };
 })(window.Game = window.Game || {});

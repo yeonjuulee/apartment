@@ -1,7 +1,7 @@
 // render-ui.js — 화면 위 UI 전부 (상태는 읽기만)
 //   상단 바(수첩 아이콘·DAY·오늘 만난 이웃) / 하단 바 / Space 안내 / 노크 말풍선 / 엘리베이터 층 선택 / 토스트
-//   대화 영역(게임 화면 아래): 대화 · 잠자리 선택 · 밤 소음 텍스트 · 첫 행동 안내
-//   카드(쪽지·목표) / 수첩 / 타이틀 / 임시 종료 화면
+//   대화 영역(게임 화면 아래): 대화 · 침대 메뉴 · 범인 지목 · 밤 소음 텍스트 · 첫 행동 안내
+//   카드(쪽지·목표·엔딩) / 수첩 / 타이틀
 // 모든 패널은 같은 디자인: 검정 바탕 + 밝은 테두리 + 빨강 강조
 (function (G) {
   'use strict';
@@ -73,6 +73,8 @@
     return lines.length;
   }
 
+  function nightLabel(nt) { return typeof nt.n === 'number' ? 'NIGHT ' + nt.n : 'NIGHT'; }   // 엔딩용 밤은 번호 없음
+
   function blink(state) { return Math.floor(state.time / 400) % 2 ? '▶' : '▷'; }
 
   // ================= 상단 바 =================
@@ -101,7 +103,7 @@
     // DAY + 진행 점
     const mid = L.width / 2;
     const isNight = state.night && state.night.phase !== 'dawn';
-    text(ctx, (isNight ? 'NIGHT ' + state.night.n : 'DAY ' + state.day),
+    text(ctx, (isNight ? nightLabel(state.night) : 'DAY ' + state.day),
       mid, cy - 4, { size: 22, bold: true, color: P.accent, align: 'center' });
     const gap = 18;
     const sx = mid - ((state.maxDay - 1) * gap) / 2;
@@ -141,7 +143,9 @@
       case 'elevator': return state.elevator.phase === 'select' ? 'W S 층 선택 · Space 이동 · A D 내리기' : '';
       case 'visit': return state.dialog ? 'Space 다음' : '';
       case 'endDay': return 'W S 선택 · Space 확인 · Tab 수첩';
-      case 'cutscene': return 'Esc 인트로 건너뛰기';
+      case 'accuse': return state.accuse && state.accuse.confirm ? 'A D 선택 · Space 확인 · Esc 돌아가기'
+        : 'A D 집 선택 · Space 지목 · Tab 수첩 · Esc 돌아가기';
+      case 'cutscene': return state.cutscene && state.cutscene.skippable ? 'Esc 인트로 건너뛰기' : '';
       case 'explore': return 'A D 이동 · Space 노크 / 엘리베이터 · Tab 수첩 · G 디버그';
       default: return '';
     }
@@ -252,11 +256,13 @@
   }
 
   // ================= 대화 영역 (게임 화면 아래) =================
-  // 우선순위: 대화 > 잠자리 선택 > 밤 소음 텍스트 > 첫 행동 안내 > 빈 틀
+  // 우선순위: 대화 > 침대 메뉴 > 범인 지목 > 밤 소음 텍스트 > 첫 행동 안내 > 빈 틀
   function dialogContent(state) {
-    if (G.cutscene.isTitle(state) || state.scene === 'stub') return null;
+    if (G.cutscene.isTitle(state)) return null;
     if (state.dialog) return 'dialog';
-    if (state.scene === 'endDay' || (state.scene === 'notebook' && state.notebook.prevScene === 'endDay')) return 'choice';
+    const under = state.scene === 'notebook' ? state.notebook.prevScene : state.scene;   // 수첩 아래에 깔린 장면
+    if (under === 'endDay') return 'choice';
+    if (under === 'accuse') return 'accuse';
     const nt = state.night;
     if (nt && !nt.hideText && (nt.phase === 'typing' || nt.phase === 'hold')) return 'night';
     if (G.hints.text(state)) return 'hint';
@@ -293,24 +299,59 @@
     }
 
     if (kind === 'choice') {
-      const idx = state.endDay ? state.endDay.index : 0;
-      text(ctx, '나', tx, y + 32, { size: 15, bold: true, color: P.accent });
-      text(ctx, '오늘은 여기까지 할까…?', tx, y + 64, { size: 17 });
+      const e = state.endDay;
+      const last = state.day >= state.maxDay;
+      text(ctx, '나', tx, y + 30, { size: 15, bold: true, color: P.accent });
+      text(ctx, last ? '오늘이 마지막 날이다. 범인을 정해야 해.' : '오늘은 여기까지 할까…?', tx, y + 60, { size: 17 });
       const met = Object.keys(state.talkedToday).length;
-      text(ctx, '오늘 만난 이웃  ' + met + ' / ' + Object.keys(state.npcs).length, tx, y + 92, { size: 13, color: P.uiDim });
-      const ox = x + w - 250;
-      ['잠자리에 든다', '아직 아니야'].forEach(function (label, i) {
-        const oy = y + 46 + i * 34;
-        const on = i === idx;
+      text(ctx, '오늘 만난 이웃  ' + met + ' / ' + Object.keys(state.npcs).length, tx, y + 88, { size: 13, color: P.uiDim });
+      const LABEL = { sleep: '잠자리에 든다', accuse: '범인을 지목한다', notYet: '아직 아니야' };
+      const ox = x + w - 260;
+      e.options.forEach(function (opt, i) {
+        const oy = y + 34 + i * 30;
+        const on = i === e.index;
         if (on) text(ctx, '▶', ox, oy, { size: 15, color: P.accent });
-        text(ctx, label, ox + 24, oy, { size: 16, bold: on, color: on ? P.accent : P.uiLight });
+        text(ctx, LABEL[opt], ox + 24, oy, { size: 16, bold: on, color: on ? P.accent : P.uiLight });
       });
-      if (state.day >= state.maxDay) text(ctx, '마지막 날 · 지목 기능은 다음 단계에서', x + w - 16, y + h - 14, { size: 11, color: P.uiDim, align: 'right' });
+    }
+
+    if (kind === 'accuse') {
+      const a = state.accuse;
+      const id = G.accuse.selected(state);
+      if (!a.confirm) {
+        text(ctx, '누가 범인일까?', tx, y + 30, { size: 16, bold: true, color: P.accent });
+        const cw = 92, chh = 54, gap = 14;
+        const gx = x + w / 2 - (G.accuse.ORDER.length * (cw + gap) - gap) / 2;
+        G.accuse.ORDER.forEach(function (hid, i) {
+          const cx = gx + i * (cw + gap), cy = y + 50;
+          const off = !!state.notebook.excluded[hid];
+          ctx.fillStyle = off ? P.lightOff : P[G.building.houses[hid].color];
+          ctx.fillRect(cx, cy, cw, chh);
+          text(ctx, hid + '호', cx + cw / 2, cy + 24, { size: 15, bold: true, align: 'center', color: off ? P.uiDim : P.silhouette });
+          text(ctx, G.residents[hid].item.name, cx + cw / 2, cy + 44, { size: 11, align: 'center', color: off ? P.uiDim : P.silhouette });
+          if (i === a.index) {
+            ctx.strokeStyle = P.accent;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(cx - 3, cy - 3, cw + 6, chh + 6);
+          }
+        });
+      } else {
+        text(ctx, '나', tx, y + 30, { size: 15, bold: true, color: P.accent });
+        text(ctx, '정말 ' + G.residents[id].name + '이(가) 범인일까?', tx, y + 62, { size: 17 });
+        text(ctx, '틀리면 그대로 끝이다.', tx, y + 90, { size: 13, color: P.uiDim });
+        const ox = x + w - 260;
+        ['지목한다', '다시 생각한다'].forEach(function (label, i) {
+          const oy = y + 50 + i * 32;
+          const on = i === a.confirmIndex;
+          if (on) text(ctx, '▶', ox, oy, { size: 15, color: P.accent });
+          text(ctx, label, ox + 24, oy, { size: 16, bold: on, color: on ? P.accent : P.uiLight });
+        });
+      }
     }
 
     if (kind === 'night') {
       const nt = state.night;
-      text(ctx, 'NIGHT ' + nt.n, tx, y + 32, { size: 14, bold: true, color: P.accent });
+      text(ctx, nightLabel(nt), tx, y + 32, { size: 14, bold: true, color: P.accent });
       wrapText(ctx, G.dayflow.visibleNightText(state), tx, y + 70, w - 44, 21, P.uiLight, 30);
       text(ctx, nt.phase === 'hold' ? 'Space ' + blink(state) : 'Space 건너뛰기', x + w - 16, y + h - 14,
         { size: 12, color: P.uiDim, align: 'right' });
@@ -364,6 +405,18 @@
         ly += n * 22 + 10;
       });
       text(ctx, 'Space  Day 1 시작 ' + blink(state), x + w - 20, y + h - 18, { size: 13, color: P.uiDim, align: 'right' });
+    }
+
+    if (c.type === 'ending') {
+      const w = 500, h = 250;
+      const x = cx - w / 2, y = cy - h / 2;
+      panel(ctx, x, y, w, h);
+      text(ctx, c.good ? 'ENDING · 해결' : 'ENDING · 오해', cx, y + 40, { size: 13, bold: true, color: c.good ? P.uiLight : P.accent, align: 'center' });
+      text(ctx, c.title, cx, y + 78, { size: 24, bold: true, color: P.accent, align: 'center' });
+      c.body.forEach(function (b, i) {
+        text(ctx, b, cx, y + 124 + i * 28, { size: 15, align: 'center', color: i === 0 ? P.uiLight : P.uiDim });
+      });
+      text(ctx, 'Space  처음으로 ' + blink(state), cx, y + h - 20, { size: 13, color: P.uiDim, align: 'center' });
     }
   }
 
@@ -500,21 +553,9 @@
     });
   }
 
-  // ================= 임시 종료 화면 (9단계 전까지) =================
-  function stub(ctx, L, state) {
-    if (state.scene !== 'stub') return;
-    ctx.fillStyle = P.bg;
-    ctx.fillRect(0, 0, L.width, L.height);
-    const cx = L.width / 2;
-    const cy = L.height / 2;
-    text(ctx, 'DAY ' + state.maxDay + ' 끝', cx, cy - 40, { size: 30, bold: true, color: P.accent, align: 'center' });
-    text(ctx, '범인 지목과 엔딩은 다음 단계(9단계)에서 구현됩니다.', cx, cy + 4, { size: 15, align: 'center' });
-    text(ctx, 'Space  처음부터', cx, cy + 50, { size: 13, color: P.uiDim, align: 'center' });
-  }
-
   G.renderUI = {
     topBar: topBar, bottomBar: bottomBar, prompt: prompt, promptText: promptText,
     knockBubble: knockBubble, elevatorPanel: elevatorPanel, toast: toast,
-    dialogArea: dialogArea, dialogContent: dialogContent, card: card, title: title, notebook: notebook, stub: stub,
+    dialogArea: dialogArea, dialogContent: dialogContent, card: card, title: title, notebook: notebook,
   };
 })(window.Game = window.Game || {});

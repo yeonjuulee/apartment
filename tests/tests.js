@@ -50,6 +50,34 @@
     for (let t = 0; t < 4000 && s.scene === 'explore'; t += 16) step(s, 'left');
   }
 
+  // 침대 메뉴에서 항목 고르기: 'sleep' | 'accuse' | 'notYet'
+  function chooseBed(s, opt) {
+    const i = s.endDay.options.indexOf(opt);
+    if (i === -1) throw new Error('메뉴에 없음: ' + opt);
+    s.endDay.index = i;
+    press(s, 'action');
+  }
+
+  // 지목: 침대에서 그 집을 골라 확정 → 엔딩 컷신 시작
+  function accuseHouse(s, id) {
+    if (s.scene !== 'endDay') goToBed(s);
+    chooseBed(s, 'accuse');
+    while (G.accuse.selected(s) !== id) press(s, 'right');
+    press(s, 'action');                       // 확인 창
+    press(s, 'left');                         // "다시 생각한다" → "지목한다"
+    press(s, 'action');
+  }
+
+  // 엔딩 컷신을 끝까지 (타이틀로 돌아올 때까지)
+  function playEnding(s) {
+    let sawCard = null;
+    for (let i = 0; i < 6000 && !G.cutscene.isTitle(s); i++) {
+      if (s.cutscene && s.cutscene.card && s.cutscene.card.type === 'ending') sawCard = s.cutscene.card;
+      step(s, null, i % 6 === 0 ? ['action'] : null);
+    }
+    return sawCard;
+  }
+
   // 인트로를 처음부터 끝까지 Space로 진행
   function playIntro(s) {
     for (let i = 0; i < 4000 && s.scene === 'cutscene'; i++) step(s, null, i % 6 === 0 ? ['action'] : null);
@@ -84,6 +112,24 @@
       assert(t && t.lines.length >= 2 && t.note, id + ' Day1 증언');
       assert(r.idle && r.refuse, id + ' 기본/거절 대사');
     });
+  });
+
+  test('이웃 5명 모두 Day 1~5 증언이 있고, 오해 반응(302 제외)도 있다', function () {
+    Object.keys(G.residents).forEach(function (id) {
+      if (id === G.building.playerHome) return;
+      const r = G.residents[id];
+      for (let d = 1; d <= 5; d++) assert(r.testimony[d] && r.testimony[d].lines.length && r.testimony[d].note, id + ' Day ' + d);
+      if (id !== G.culprit) assert(r.accused && r.accused.length, id + ' accused');
+    });
+  });
+
+  test('추리 단서: 302호의 거짓말을 뒤집는 증언이 있다', function () {
+    const R = G.residents;
+    assert(/새벽/.test(R['302'].testimony[2].note), '302 Day2: 늘 새벽 귀가 주장');
+    assert(/11시/.test(R['102'].testimony[3].note) && /302/.test(R['102'].testimony[3].note), '102 Day3: 밤 11시 302 목격');
+    assert(/없다/.test(R['302'].testimony[4].note), '302 Day4: 러닝머신 없다고 함');
+    assert(/러닝머신/.test(R['202'].testimony[4].note) && /302/.test(R['202'].testimony[4].note), '202 Day4: 러닝머신 박스 송장');
+    assert(/대각선/.test(R['101'].testimony[3].note), '101 Day3: 대각선 전달');
   });
 
   test('밤 소음 텍스트가 Night 1~5 모두 있고 "쿵"이 들어 있다', function () {
@@ -168,7 +214,7 @@
   test('내 집 왼쪽 외벽 / 2층 오른쪽 202호 경계를 통과할 수 없다', function () {
     const s = newState();
     goToBed(s);                                   // 가는 길에 침대가 있으므로 "아직 아니야"로 닫고 계속
-    press(s, 'down'); press(s, 'action');
+    chooseBed(s, 'notYet');
     run(s, 'left', 4000);
     assert(s.player.x === W.walkBounds(2).min, '왼쪽 x=' + s.player.x);
     inHallway(s, 2, W.elevatorX());
@@ -409,8 +455,7 @@
   test('"아직 아니야" → 닫히고, 침대 앞에 머물면 다시 안 뜨고, 벗어났다 돌아오면 또 뜬다', function () {
     const s = newState();
     goToBed(s);
-    press(s, 'down');
-    press(s, 'action');
+    chooseBed(s, 'notYet');
     assert(s.scene === 'explore', '안 닫힘');
     run(s, null, 500);
     assert(s.scene === 'explore', '머물렀는데 다시 뜸');
@@ -479,22 +524,90 @@
     assert(G.visit.decideMode(s, '202') === 'normal', '다음 날에도 거절');
   });
 
-  test('증언이 없는 날(Day 2~)에는 기본 대사가 나오고 수첩에는 기록되지 않는다', function () {
+  test('Day 2에는 Day 2 증언이 나오고 수첩에 Day 2로 기록된다', function () {
     const s = newState();
     G.dayflow.startDay(s, 2);
     knockAndFinish(s, '102');
-    assert(s.talkedToday['102'] && !s.log.length, '기록됨');
-    assert(G.visit.testimonyFor('102', 2).lines[0] === G.residents['102'].idle, '기본 대사');
+    assert(s.log.length === 1 && s.log[0].day === 2 && s.log[0].text === G.residents['102'].testimony[2].note, JSON.stringify(s.log));
   });
 
-  test('마지막 날(Day 5)에 잠자리에 들면 임시 종료 화면 → Space로 타이틀부터', function () {
+  test('증언이 정의되지 않은 날에는 기본 대사가 나오고 기록되지 않는다', function () {
+    const t = G.visit.testimonyFor('102', 9);
+    assert(t.lines[0] === G.residents['102'].idle && t.note === null, JSON.stringify(t));
+  });
+
+  // ================= 범인 지목 + 엔딩 =================
+  test('침대 메뉴: 평소엔 [잠자리 / 지목 / 아직], Day 5에는 잠자리가 없다', function () {
     const s = newState();
-    G.dayflow.startDay(s, 5);
     goToBed(s);
+    assert(s.endDay.options.join() === 'sleep,accuse,notYet', s.endDay.options.join());
+    const t = newState();
+    G.dayflow.startDay(t, 5);
+    goToBed(t);
+    assert(t.endDay.options.join() === 'accuse,notYet', t.endDay.options.join());
+  });
+
+  test('지목: 5집을 고를 수 있고, 확인 창의 기본값은 "다시 생각한다"', function () {
+    const s = newState();
+    goToBed(s);
+    chooseBed(s, 'accuse');
+    assert(s.scene === 'accuse' && G.accuse.selected(s) === '301', '시작');
+    const seen = [];
+    for (let i = 0; i < 5; i++) { seen.push(G.accuse.selected(s)); press(s, 'right'); }
+    assert(seen.join() === '301,302,202,101,102' && G.accuse.selected(s) === '301', '순환: ' + seen.join());
     press(s, 'action');
-    assert(s.scene === 'stub', s.scene);
+    assert(s.accuse.confirm && s.accuse.confirmIndex === 1, '확인 창');
+    press(s, 'action');                                  // 다시 생각한다
+    assert(s.scene === 'accuse' && !s.accuse.confirm, '취소 안 됨');
+  });
+
+  test('지목 중 Esc → 침대 메뉴로, Tab → 수첩을 보고 돌아온다', function () {
+    const s = newState();
+    goToBed(s);
+    chooseBed(s, 'accuse');
+    press(s, 'notebook');
+    assert(s.scene === 'notebook', '수첩 안 열림');
+    press(s, 'notebook');
+    assert(s.scene === 'accuse', '복귀: ' + s.scene);
+    press(s, 'close');
+    assert(s.scene === 'endDay', 'Esc: ' + s.scene);
+  });
+
+  test('302호 지목 → 대면(302 ❗ 깜짝, 💧 축 처짐) → 조용한 밤 → 해결 엔딩 → 타이틀', function () {
+    const s = newState();
+    G.dayflow.startDay(s, 3);
+    accuseHouse(s, '302');
+    assert(s.scene === 'cutscene' && !s.cutscene.skippable, '엔딩 시작');
+    waitUntil(s, function () { return s.dialog; });
+    assert(s.player.floor === 3 && s.player.x === W.knockSpot('302') && s.npcs['302'].x === W.meetSpot('302'), '대면 위치');
     press(s, 'action');
-    assert(G.cutscene.isTitle(s) && s.day === 1 && !s.log.length, '재시작');
+    assert(s.dialog.speaker === G.residents['302'].name && G.emotes.of(s, '302').type === 'surprise', '302 반응');
+    press(s, 'close');
+    assert(s.scene === 'cutscene', 'Esc로 엔딩이 건너뛰어짐');
+    const card = playEnding(s);
+    assert(card && card.good, '해결 엔딩 카드 없음');
+    assert(G.cutscene.isTitle(s) && s.day === 1 && !s.log.length, '타이틀로 안 돌아감');
+  });
+
+  test('다른 집 지목 → 억울한 이웃 💢💢 부들부들 → 소음은 계속 → 오해 엔딩 → 타이틀', function () {
+    ['301', '202', '101', '102'].forEach(function (id) {
+      const s = newState();
+      accuseHouse(s, id);
+      waitUntil(s, function () { return s.dialog; });
+      press(s, 'action');
+      assert(s.dialog.speaker === G.residents[id].name && s.dialog.lines[0] === G.residents[id].accused[0], id + ' 반응');
+      assert(G.emotes.of(s, id).type === 'anger2' && G.emotes.of(s, id).gesture === 'tremble', id + ' 이펙트');
+      const card = playEnding(s);
+      assert(card && !card.good && card.body[0].indexOf(id) === 0, id + ' 오해 엔딩');
+      assert(G.cutscene.isTitle(s), id + ' 타이틀');
+    });
+  });
+
+  test('엔딩용 밤은 수첩에 기록되지 않는다', function () {
+    const s = newState();
+    accuseHouse(s, '101');
+    waitUntil(s, function () { return s.night && s.night.phase === 'hold'; });
+    assert(!s.log.some(function (e) { return e.type === 'noise'; }), '기록됨');
   });
 
   // ================= 통합 =================
@@ -524,6 +637,50 @@
     assert(s.day === 2 && s.scene === 'explore', 'Day 2 실패');
   });
 
+  function visitAll(s) {
+    function rideTo(f) {
+      if (s.player.floor === f) return;
+      if (s.player.area === 'home') run(s, 'right', 1200);
+      atElevator(s, s.player.floor);
+      press(s, 'action');
+      waitUntil(s, function () { return s.elevator.phase === 'select'; });
+      while (s.elevator.selection !== f) press(s, s.elevator.selection < f ? 'up' : 'down');
+      press(s, 'action');
+      waitUntil(s, function () { return s.scene === 'explore'; });
+    }
+    if (s.player.area === 'home') run(s, 'right', 1200);
+    rideTo(1); knockAndFinish(s, '101'); knockAndFinish(s, '102');
+    rideTo(3); knockAndFinish(s, '301'); knockAndFinish(s, '302');
+    rideTo(2); knockAndFinish(s, '202');
+    run(s, 'left', 1600);
+  }
+
+  test('전체 플레이 (Day 3 해결): 인트로 → 매일 5집 방문 → Day 3에 302 지목 → 해결 엔딩', function () {
+    const s = G.createState();
+    playIntro(s);
+    for (let d = 1; d <= 3; d++) {
+      assert(s.day === d && s.scene === 'explore', 'Day ' + d + ' 시작 실패');
+      visitAll(s);
+      if (d < 3) { goToBed(s); chooseBed(s, 'sleep'); sleepThroughNight(s); }
+    }
+    assert(s.log.filter(function (e) { return e.type === 'testimony'; }).length === 15, '증언 15개');
+    assert(s.log.filter(function (e) { return e.type === 'noise'; }).length === 3, '소음 3개');
+    accuseHouse(s, '302');
+    const card = playEnding(s);
+    assert(card && card.good && card.body[0].indexOf('DAY 3') === 0, '해결 엔딩');
+  });
+
+  test('전체 플레이 (Day 5 해결): 아무도 안 만나고 Day 5까지 → 잠자리 불가 → 302 지목', function () {
+    const s = G.createState();
+    press(s, 'close');
+    for (let d = 1; d < 5; d++) { goToBed(s); chooseBed(s, 'sleep'); sleepThroughNight(s); }
+    assert(s.day === 5, 'day ' + s.day);
+    goToBed(s);
+    assert(s.endDay.options.indexOf('sleep') === -1, '잠자리 가능');
+    accuseHouse(s, '302');
+    assert(playEnding(s).good, '해결 엔딩');
+  });
+
   // ================= 첫 행동 안내 =================
   test('안내: 이동 → (복도에서) 노크 → (기록 후) 수첩 → (외출 후 귀가) 침대, 각각 한 번씩', function () {
     const s = newState();
@@ -538,9 +695,21 @@
     run(s, 'left', 1300);
     assert(s.hints.seen.notebook && s.player.area === 'home' && s.hints.current === 'bed', '침대 안내 ' + s.hints.current);
     goToBed(s);
-    press(s, 'down'); press(s, 'action');
+    chooseBed(s, 'notYet');
     step(s);
     assert(s.hints.seen.bed && s.hints.current === null, '안내가 남음 ' + s.hints.current);
+  });
+
+  test('마지막 날에는 "침대에서 지목" 안내가 뜨고, 침대 메뉴를 열면 사라진다', function () {
+    const s = newState();
+    s.hints.seen = { move: true, knock: true, notebook: true, bed: true };
+    G.dayflow.startDay(s, 5);
+    step(s);
+    assert(s.hints.current === 'lastDay', s.hints.current);
+    goToBed(s);
+    chooseBed(s, 'notYet');
+    step(s);
+    assert(s.hints.current === null, s.hints.current);
   });
 
   // ================= 레이아웃 =================
@@ -580,7 +749,16 @@
     s = newState(); goToBed(s); list.push(s);                                                     // 선택창
     s = newState(); G.dayflow.startNight(s, 2); waitUntil(s, function () { return s.night.chars > 8; }); list.push(s); // 밤 + 💢
     s = newState(); G.dayflow.startNight(s, 2); waitUntil(s, function () { return s.night.phase === 'fadeOut'; }, 30000); run(s, null, 200); list.push(s);
-    s = newState(); G.dayflow.startDay(s, 5); goToBed(s); press(s, 'action'); list.push(s);      // 임시 종료
+    s = newState(); goToBed(s); chooseBed(s, 'accuse'); list.push(s);                                 // 지목 선택
+    s = newState(); goToBed(s); chooseBed(s, 'accuse'); press(s, 'action'); list.push(s);             // 지목 확인
+    s = newState(); G.dayflow.startDay(s, 5); goToBed(s); list.push(s);                                // Day 5 메뉴
+    s = newState(); accuseHouse(s, '302'); waitUntil(s, function () { return s.dialog; }); press(s, 'action'); list.push(s); // 대면
+    s = newState(); accuseHouse(s, '302');
+    for (let i = 0; i < 6000 && !(s.cutscene && s.cutscene.card); i++) step(s, null, i % 6 === 0 ? ['action'] : null);
+    list.push(s);                                                                                      // 해결 엔딩 카드
+    s = newState(); accuseHouse(s, '202');
+    for (let i = 0; i < 6000 && !(s.cutscene && s.cutscene.card); i++) step(s, null, i % 6 === 0 ? ['action'] : null);
+    list.push(s);                                                                                      // 오해 엔딩 카드
     s = G.createState(); list.push(s);                                                                 // 타이틀
     s = G.createState(); press(s, 'action'); waitUntil(s, function () { return s.night.phase === 'hold'; }); press(s, 'action'); press(s, 'action'); press(s, 'action'); list.push(s); // 밤 독백 + 부들부들
     s = G.createState(); playIntroUntil(s, 'note'); waitUntil(s, function () { return s.cutscene.card; }); list.push(s);   // 쪽지 카드

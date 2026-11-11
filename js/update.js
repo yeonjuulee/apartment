@@ -6,7 +6,7 @@
     state.time += dt;
     if (input.consumePressed('debug')) state.debug = !state.debug;
 
-    // 수첩 열기: Tab 또는 상단 아이콘 클릭 (낮 / 잠자리 선택에서만)
+    // 수첩 열기: Tab 또는 상단 아이콘 클릭 (낮 / 침대 메뉴 / 지목 중에만)
     const click = input.consumeClick ? input.consumeClick() : null;
     if (G.notebook.canOpen(state) && (input.consumePressed('notebook') || G.notebook.hitIcon(click))) {
       G.notebook.open(state);
@@ -24,8 +24,8 @@
       case 'notebook': G.notebook.update(state, input); break;
       case 'endDay': G.dayflow.updateEndDay(state, input); break;
       case 'night': G.dayflow.updateNight(state, input, dt); break;
+      case 'accuse': G.accuse.update(state, input); break;
       case 'cutscene': G.cutscene.update(state, input, dt); break;
-      case 'stub': G.dayflow.updateStub(state, input); break;
     }
 
     G.notebook.updateToast(state, dt);

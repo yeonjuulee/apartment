@@ -19,7 +19,7 @@
     return true;
   }
 
-  function canOpen(state) { return state.scene === 'explore' || state.scene === 'endDay'; }
+  function canOpen(state) { return state.scene === 'explore' || state.scene === 'endDay' || state.scene === 'accuse'; }
 
   function open(state) {
     const nb = state.notebook;
